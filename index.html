@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Miami Fishing Almanac</title>
+
+  <!-- Retro coastal fonts: Pacifico (surf brand) · Josefin Slab (vintage body) · Special Elite (stamp/label) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Josefin+Slab:wght@400;600;700&family=Special+Elite&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- Leaflet Heatmap Plugin -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --espresso:   #1c1008;   /* deep espresso brown — header bg */
+      --espresso-lt:#2d1c0e;   /* lighter espresso for hover states */
+      --cream:      #f5f0e4;   /* aged paper */
+      --cream-dk:   #ede5d0;   /* warm parchment */
+      --sand:       #d4bc96;   /* sandy tan border */
+      --sand-dk:    #b8a07a;   /* darker sand */
+      --coral:      #cc5540;   /* warm terracotta coral */
+      --coral-lt:   #e06848;   /* lighter coral */
+      --teal:       #4a8c97;   /* muted ocean teal */
+      --teal-lt:    #6ab2be;   /* lighter teal */
+      --navy:       #2b4a6a;   /* faded navy */
+      --navy-lt:    #3c6082;   /* lighter faded navy */
+      --brown:      #8a6845;   /* warm driftwood brown */
+      --text:       #3c2e1e;   /* warm near-black */
+      --muted:      #897a6a;   /* sun-faded text */
+      --glass:      rgba(245,240,228,0.97);
+      --border:     rgba(180,150,110,0.5);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Josefin Slab', Georgia, serif;
+      background: var(--cream);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* ─── HEADER ──────────────────────────────────────────── */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; height: 64px; z-index: 1100;
+      background: var(--espresso);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 22px;
+      box-shadow: 0 3px 24px rgba(0,0,0,.45);
+    }
+
+    /* animated warm wave underline — brighter against dark header */
+    #header::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg,
+        var(--teal-lt), var(--coral-lt), var(--teal), var(--coral), var(--teal-lt), var(--coral-lt));
+      background-size: 300% 100%;
+      animation: waveSlide 7s linear infinite;
+    }
+
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-icon {
+      font-size: 2rem; line-height: 1;
+      filter: drop-shadow(0 1px 4px rgba(0,0,0,.5));
+    }
+    .brand-text h1 {
+      font-family: 'Pacifico', cursive;
+      font-size: 1.4rem; font-weight: 400;
+      color: var(--cream); letter-spacing: .2px;
+      text-shadow: 0 1px 6px rgba(0,0,0,.4);
+    }
+    .brand-text p {
+      font-family: 'Special Elite', monospace;
+      font-size: .68rem; color: rgba(245,240,228,.5); margin-top: 2px; letter-spacing: .5px;
+    }
+
+    .controls { display: flex; align-items: center; gap: 7px; }
+
+    .badge {
+      padding: 5px 11px; border-radius: 4px;
+      font-family: 'Special Elite', monospace; font-size: .70rem; letter-spacing: .6px;
+      text-transform: uppercase;
+      background: var(--coral); color: var(--cream);
+      box-shadow: 0 1px 6px rgba(0,0,0,.3);
+    }
+
+    .ctrl-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 13px; border-radius: 5px; font-size: .70rem; cursor: pointer;
+      border: 1.5px solid rgba(245,240,228,.28); color: rgba(245,240,228,.72);
+      background: transparent;
+      font-family: 'Special Elite', monospace;
+      text-transform: uppercase; letter-spacing: .4px;
+      transition: background .2s, color .2s, border-color .2s, box-shadow .2s;
+      user-select: none;
+    }
+    .ctrl-btn.on {
+      background: var(--teal); color: var(--cream);
+      border-color: var(--teal);
+      box-shadow: 0 1px 8px rgba(74,140,151,.4);
+    }
+    .ctrl-btn:hover {
+      background: rgba(245,240,228,.1); color: var(--cream);
+      border-color: rgba(245,240,228,.55);
+    }
+
+    /* ─── MAP ─────────────────────────────────────────────── */
+    #map { position: fixed; top: 64px; left: 0; right: 0; bottom: 0; z-index: 1; }
+
+    /* ─── DECORATIVE SEA-GLASS BLOBS ─────────────────────── */
+    /* These float over the map like scattered beach debris   */
+    .sea-glass {
+      position: fixed; z-index: 1050; pointer-events: none;
+      border-radius: 50%; opacity: .28;
+      mix-blend-mode: multiply;
+    }
+    .sg-1 { width: 28px; height: 24px; background: #7ecfc0; bottom: 90px; right: 250px; border-radius: 60% 40% 55% 45%; transform: rotate(-18deg); }
+    .sg-2 { width: 20px; height: 18px; background: #c8a05a; bottom: 130px; right: 280px; border-radius: 45% 55% 40% 60%; transform: rotate(34deg); }
+    .sg-3 { width: 16px; height: 14px; background: #9ab8c8; bottom: 100px; right: 232px; border-radius: 55% 45% 60% 40%; transform: rotate(-7deg); }
+
+    /* ─── LEGEND ──────────────────────────────────────────── */
+    #legend {
+      position: fixed; bottom: 56px; right: 18px; z-index: 1100;
+      background: var(--cream);
+      /* outer solid border + inner dotted stamp-perforation effect */
+      border: 1.5px solid var(--sand);
+      outline: 4px solid var(--cream);
+      outline-offset: -6px;
+      border-radius: 8px; padding: 16px 18px; min-width: 215px;
+      box-shadow: 3px 5px 20px rgba(60,46,30,.16), inset 0 0 0 1px rgba(255,255,255,.7);
+    }
+
+    #legend h3 {
+      font-family: 'Special Elite', monospace;
+      font-size: .70rem; font-weight: 400; text-transform: uppercase;
+      letter-spacing: 1.4px; color: var(--navy); margin-bottom: 12px;
+    }
+
+    .legend-heat { margin-bottom: 14px; }
+    .legend-heat-label {
+      font-size: .72rem; color: var(--muted); margin-bottom: 6px;
+      font-family: 'Josefin Slab', serif;
+    }
+
+    .heat-bar {
+      height: 11px; border-radius: 6px; margin-bottom: 4px;
+      background: linear-gradient(to right,
+        rgba(74,140,151,.45),
+        rgba(100,162,70,.56),
+        rgba(210,155,42,.66),
+        rgba(204,85,64,.80),
+        rgba(155,38,20,.94));
+    }
+    .heat-labels {
+      display: flex; justify-content: space-between;
+      font-size: .65rem; color: var(--muted);
+      font-family: 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .3px;
+    }
+
+    .legend-divider { border: none; border-top: 1px solid var(--sand); margin: 12px 0; }
+
+    .legend-markers h4 {
+      font-family: 'Special Elite', monospace;
+      font-size: .66rem; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .legend-row {
+      display: flex; align-items: center; gap: 9px;
+      font-size: .74rem; color: var(--muted); margin-bottom: 6px;
+      font-family: 'Josefin Slab', serif;
+    }
+    .legend-fish { font-size: 16px; line-height: 1; flex-shrink: 0; }
+    .legend-fish-hot  { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(340deg) brightness(1.05) drop-shadow(0 1px 4px rgba(200,75,40,.75)); }
+    .legend-fish-warm { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(275deg) brightness(1.05) drop-shadow(0 1px 4px rgba(130,80,190,.75)); }
+    .legend-fish-cool { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(162deg) brightness(1.0)  drop-shadow(0 1px 3px rgba(74,140,150,.68)); }
+
+    /* ─── LEAFLET POPUP OVERRIDES ─────────────────────────── */
+    .leaflet-popup-content-wrapper {
+      background: var(--cream) !important;
+      border: 1.5px solid var(--sand) !important;
+      border-radius: 8px !important;
+      box-shadow: 3px 5px 22px rgba(60,46,30,.2), inset 0 0 0 1px rgba(255,255,255,.6) !important;
+      color: var(--text) !important;
+    }
+    .leaflet-popup-tip { background: var(--sand) !important; }
+    .leaflet-popup-content { margin: 14px 16px !important; min-width: 230px; }
+    .leaflet-popup-close-button { color: var(--muted) !important; font-size: 18px !important; right: 6px !important; top: 6px !important; }
+    .leaflet-popup-close-button:hover { color: var(--text) !important; }
+
+    /* ─── POPUP CARD CONTENTS ─────────────────────────────── */
+    .pop-title {
+      font-family: 'Pacifico', cursive;
+      font-size: 1rem; font-weight: 400; color: var(--navy);
+      margin-bottom: 7px; display: flex; align-items: center; gap: 6px;
+    }
+    .pop-desc {
+      font-size: .78rem; color: var(--muted); line-height: 1.58; margin-bottom: 10px;
+      font-family: 'Josefin Slab', serif;
+    }
+    .pop-section-label {
+      font-family: 'Special Elite', monospace;
+      font-size: .62rem; text-transform: uppercase;
+      letter-spacing: .9px; color: var(--coral); margin-bottom: 5px;
+    }
+    .pop-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+    .pop-tag {
+      background: rgba(74,140,151,.10); border: 1px solid rgba(74,140,151,.38);
+      color: var(--teal); border-radius: 4px;
+      padding: 2px 9px; font-size: .72rem; font-family: 'Josefin Slab', serif;
+      text-decoration: none; transition: background .15s;
+    }
+    a.pop-tag:hover { background: rgba(74,140,151,.22); border-color: var(--teal); color: var(--navy); }
+    .pop-tip {
+      font-size: .75rem; color: var(--brown); line-height: 1.45;
+      font-family: 'Josefin Slab', serif;
+      border-top: 1px solid var(--sand);
+      padding-top: 8px; margin-top: 4px;
+    }
+    .pop-tip strong { color: var(--coral); }
+
+    /* ─── CUSTOM MARKER ──────────────────────────────────── */
+    .fspot {
+      position: relative; cursor: pointer;
+      font-size: 20px; line-height: 1;
+      display: block; width: 22px; height: 22px;
+      text-align: center;
+    }
+    .fspot-hot  { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(340deg) brightness(1.1)  drop-shadow(0 1px 6px rgba(200,75,40,.88)); }
+    .fspot-warm { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(275deg) brightness(1.05) drop-shadow(0 1px 5px rgba(130,80,190,.82)); }
+    .fspot-cool { filter: grayscale(1) sepia(1) saturate(5) hue-rotate(162deg) brightness(1.0)  drop-shadow(0 1px 4px rgba(74,140,150,.78)); }
+
+    /* pulse ring on premier spots */
+    .fspot-hot::after {
+      content: ''; position: absolute;
+      inset: -5px; border-radius: 50%;
+      border: 2px solid var(--coral);
+      animation: pulse 2s ease-out infinite;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(1);   opacity: .8; }
+      70%  { transform: scale(2.2); opacity: 0;  }
+      100% { transform: scale(2.2); opacity: 0;  }
+    }
+
+    /* ─── REDDIT PANEL ───────────────────────────────────── */
+    #reddit-panel {
+      position: fixed; top: 64px; left: 0; bottom: 50px;
+      width: 330px; z-index: 1050;
+      background: var(--cream);
+      border-right: 1.5px solid var(--sand);
+      box-shadow: 4px 0 24px rgba(60,46,30,.12);
+      transform: translateX(-100%);
+      transition: transform .3s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    #reddit-panel.open { transform: translateX(0); }
+
+    #reddit-ph {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 15px; border-bottom: 1px solid var(--sand); flex-shrink: 0;
+      background: var(--espresso);
+    }
+    #reddit-ph h2 {
+      font-family: 'Pacifico', cursive; font-size: .95rem; font-weight: 400;
+      display: flex; align-items: center; gap: 7px; color: var(--cream);
+    }
+    .r-logo { color: var(--coral-lt); font-size: 1.1rem; }
+    .r-pill {
+      font-size: .60rem; padding: 2px 7px;
+      border-radius: 3px; background: rgba(224,104,72,.25); color: var(--coral-lt);
+      border: 1px solid rgba(224,104,72,.45);
+      font-family: 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .5px;
+    }
+
+    #reddit-filters {
+      display: flex; gap: 5px; padding: 9px 12px;
+      border-bottom: 1px solid var(--sand); flex-shrink: 0; flex-wrap: wrap;
+    }
+    .rf-chip {
+      padding: 3px 10px; border-radius: 4px; font-size: .66rem; cursor: pointer;
+      border: 1px solid var(--sand-dk); color: var(--brown); background: transparent;
+      font-family: 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .3px;
+      transition: all .18s;
+    }
+    .rf-chip.active { background: var(--teal); border-color: var(--teal); color: var(--cream); }
+    .rf-chip:hover:not(.active) { background: var(--sand); color: var(--navy); border-color: var(--sand-dk); }
+
+    .r-actions { display: flex; gap: 6px; }
+    /* r-btn lives in both the espresso header and the cream body, use neutral tones */
+    .r-btn {
+      background: rgba(245,240,228,.10); border: 1px solid rgba(245,240,228,.28);
+      color: rgba(245,240,228,.75); border-radius: 5px; padding: 4px 9px;
+      font-size: .68rem; cursor: pointer; transition: all .18s;
+      font-family: 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .r-btn:hover { background: rgba(245,240,228,.2); color: var(--cream); }
+
+    #reddit-posts { overflow-y: auto; flex: 1; padding: 8px; }
+    #reddit-posts::-webkit-scrollbar { width: 4px; }
+    #reddit-posts::-webkit-scrollbar-thumb { background: var(--sand); border-radius: 2px; }
+
+    .r-post {
+      display: flex; gap: 10px; padding: 10px; border-radius: 6px;
+      border: 1px solid transparent; text-decoration: none; color: var(--text);
+      transition: background .18s, border-color .18s; margin-bottom: 5px;
+    }
+    .r-post:hover { background: rgba(212,188,150,.22); border-color: var(--sand); }
+
+    .r-thumb {
+      width: 58px; height: 58px; border-radius: 5px; object-fit: cover;
+      flex-shrink: 0; border: 1px solid var(--sand);
+    }
+    .r-thumb-ph {
+      width: 58px; height: 58px; border-radius: 5px; flex-shrink: 0;
+      background: rgba(212,188,150,.3); border: 1px solid var(--sand);
+      display: flex; align-items: center; justify-content: center; font-size: 1.5rem;
+    }
+    .r-body { flex: 1; min-width: 0; }
+    .r-title {
+      font-size: .80rem; font-weight: 600; line-height: 1.38; color: var(--text);
+      margin-bottom: 5px; font-family: 'Josefin Slab', serif;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .r-meta {
+      display: flex; flex-wrap: wrap; gap: 5px; font-size: .65rem; color: var(--muted);
+      align-items: center; font-family: 'Special Elite', monospace;
+    }
+    .r-sub { color: var(--teal); font-weight: 600; }
+    .r-score { color: var(--coral); }
+    .r-ago { margin-left: auto; }
+
+    .r-state {
+      padding: 28px 16px; text-align: center; font-size: .82rem;
+      color: var(--muted); line-height: 1.65; font-family: 'Josefin Slab', serif;
+    }
+    .r-spinner {
+      width: 20px; height: 20px; border: 2px solid var(--sand);
+      border-top-color: var(--teal); border-radius: 50%;
+      animation: spin .7s linear infinite; margin: 0 auto 12px;
+    }
+    .r-err { color: #a03020; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── SEASON PANEL ───────────────────────────────────── */
+    #season-panel {
+      position: fixed; top: 64px; right: 0; bottom: 50px;
+      width: 300px; z-index: 1050;
+      background: var(--cream);
+      border-left: 1.5px solid var(--sand);
+      box-shadow: -4px 0 24px rgba(60,46,30,.12);
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    #season-panel.open { transform: translateX(0); }
+
+    /* legend slides left when season panel opens */
+    #legend { transition: right .3s cubic-bezier(.4,0,.2,1); }
+    #legend.shifted { right: 318px; }
+
+    #season-header {
+      padding: 14px 15px 12px;
+      border-bottom: 1px solid var(--sand); flex-shrink: 0;
+      background: var(--espresso);
+    }
+    .season-title-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .season-title-row h2 {
+      font-family: 'Pacifico', cursive;
+      font-size: 1rem; font-weight: 400;
+      display: flex; align-items: center; gap: 8px; color: var(--cream);
+    }
+    .season-icon { font-size: 1.3rem; }
+    .season-month-label {
+      font-size: .68rem; color: rgba(245,240,228,.52); font-style: italic;
+      margin-bottom: 6px; font-family: 'Josefin Slab', serif;
+    }
+    .season-tagline {
+      font-size: .76rem; color: rgba(245,240,228,.72); line-height: 1.52;
+      font-family: 'Josefin Slab', serif;
+    }
+    .season-species { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+    .season-species-tag {
+      padding: 2px 8px; border-radius: 4px; font-size: .67rem;
+      border: 1px solid rgba(106,178,190,.35); color: var(--teal-lt);
+      background: rgba(74,140,151,.15); font-family: 'Josefin Slab', serif;
+    }
+
+    #season-spots-list { overflow-y: auto; flex: 1; padding: 10px 12px; }
+    #season-spots-list::-webkit-scrollbar { width: 4px; }
+    #season-spots-list::-webkit-scrollbar-thumb { background: var(--sand); border-radius: 2px; }
+
+    .season-spots-heading {
+      font-family: 'Special Elite', monospace;
+      font-size: .63rem; text-transform: uppercase;
+      letter-spacing: 1.1px; color: var(--coral); margin-bottom: 10px;
+    }
+    .season-spot-item {
+      display: flex; gap: 10px; padding: 10px; border-radius: 6px;
+      border: 1px solid transparent; cursor: pointer; margin-bottom: 6px;
+      transition: background .18s, border-color .18s;
+    }
+    .season-spot-item:hover { background: rgba(212,188,150,.22); border-color: var(--sand); }
+    .season-spot-num {
+      font-family: 'Pacifico', cursive;
+      font-size: .85rem; font-weight: 400; color: var(--teal-lt);
+      min-width: 18px; padding-top: 2px;
+    }
+    .season-spot-name {
+      font-size: .82rem; font-weight: 700; color: var(--text);
+      margin-bottom: 3px; font-family: 'Josefin Slab', serif;
+    }
+    .season-spot-reason {
+      font-size: .72rem; color: var(--muted); line-height: 1.42;
+      font-family: 'Josefin Slab', serif;
+    }
+    .season-spot-fly {
+      font-size: .64rem; color: var(--coral); margin-top: 5px;
+      font-family: 'Special Elite', monospace; text-transform: uppercase; letter-spacing: .4px;
+      opacity: 0; transition: opacity .15s;
+    }
+    .season-spot-item:hover .season-spot-fly { opacity: 1; }
+
+    /* ─── ANIMATED WAVE FOOTER ───────────────────────────── */
+    #wave-footer {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 50px;
+      z-index: 1200; pointer-events: none; overflow: hidden;
+    }
+
+    .wave-svg {
+      position: absolute; bottom: 0;
+      width: 200%; height: 50px;
+      left: 0;
+    }
+
+    .wave-svg-1 { animation: waveDrift 7s linear infinite; }
+    .wave-svg-2 { animation: waveDrift 11s linear infinite reverse; }
+    .wave-svg-3 { animation: waveDrift 15s linear infinite; }
+
+    @keyframes waveDrift {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    @keyframes waveSlide {
+      0%   { background-position: 0 0; }
+      100% { background-position: 300% 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── HEADER ──────────────────────────────────────────── -->
+<header id="header">
+  <div class="brand">
+    <span class="brand-icon">⚓</span>
+    <div class="brand-text">
+      <h1>The Miami Fishing Almanac</h1>
+      <p>Interactive guide to South Florida's best fishing waters</p>
+    </div>
+  </div>
+  <div class="controls">
+    <span class="badge" id="spot-count">40 Spots</span>
+<div class="ctrl-btn"    id="btn-reddit"  onclick="toggleReddit()" style="border-color:rgba(204,85,64,.6);color:#e8866e;">🔴 Reddit Feed</div>
+    <div class="ctrl-btn"    id="btn-season"  onclick="toggleSeason()">🗓 In Season</div>
+    <div class="ctrl-btn on" id="btn-density" onclick="loadLiveDensity()" title="iNaturalist fish observations — click to refresh">📡 Live Density</div>
+  </div>
+</header>
+
+<!-- ─── MAP ─────────────────────────────────────────────── -->
+<div id="map"></div>
+
+<!-- ─── LEGEND ──────────────────────────────────────────── -->
+<div id="legend">
+  <h3>⚓ Map Legend</h3>
+
+  <div class="legend-heat" id="legend-heat">
+    <div class="legend-heat-label" style="margin-bottom:2px">Fishing Activity Density</div>
+    <div style="font-size:.62rem;color:var(--muted);font-family:'Special Elite',monospace;letter-spacing:.3px;margin-bottom:6px;text-transform:uppercase" id="legend-density-src">Species prestige · placeholder</div>
+    <div class="heat-bar"></div>
+    <div class="heat-labels"><span>Low</span><span>Medium</span><span>High</span></div>
+  </div>
+
+  <hr class="legend-divider">
+
+  <div class="legend-markers">
+    <h4>Spot Quality</h4>
+    <div style="font-size:.62rem;color:var(--muted);font-family:'Special Elite',monospace;letter-spacing:.3px;text-transform:uppercase;margin-bottom:8px">Species prestige · reputation</div>
+    <div class="legend-row"><span class="legend-fish legend-fish-hot">🐟</span>  World-class / Premier</div>
+    <div class="legend-row"><span class="legend-fish legend-fish-warm">🐟</span> Excellent</div>
+    <div class="legend-row"><span class="legend-fish legend-fish-cool">🐟</span> Good / Local Favorite</div>
+  </div>
+</div>
+
+<!-- ─── REDDIT FEED PANEL ─────────────────────────────────── -->
+<div id="reddit-panel">
+  <div id="reddit-ph">
+    <h2><span class="r-logo">⬤</span> Reddit Feed <span class="r-pill">LIVE</span></h2>
+    <div class="r-actions">
+      <button class="r-btn" id="r-refresh-btn" onclick="loadReddit(true)" title="Refresh">↺ Refresh</button>
+      <button class="r-btn" onclick="toggleReddit()">✕</button>
+    </div>
+  </div>
+  <div id="reddit-filters">
+    <span class="rf-chip active" data-q="miami fishing florida" data-sub="FLFishing+fishing" onclick="setFilter(this)">🌴 Miami</span>
+    <span class="rf-chip" data-q="south florida fishing" data-sub="FLFishing+fishing" onclick="setFilter(this)">🗺 South FL</span>
+    <span class="rf-chip" data-q="tarpon snook bonefish" data-sub="FLFishing+flyfishing" onclick="setFilter(this)">🎣 Flats Species</span>
+    <span class="rf-chip" data-q="biscayne bay keys fishing" data-sub="FLFishing+fishing" onclick="setFilter(this)">🏝 Bay &amp; Keys</span>
+  </div>
+  <div id="reddit-posts">
+    <div class="r-state">Click <strong style="color:var(--teal)">Reddit Feed</strong> in the header to load live posts.</div>
+  </div>
+</div>
+
+<!-- ─── SEASON PANEL ──────────────────────────────────────── -->
+<div id="season-panel">
+  <div id="season-header">
+    <div class="season-title-row">
+      <h2><span class="season-icon" id="season-icon"></span><span id="season-name"></span></h2>
+      <button class="r-btn" onclick="toggleSeason()">✕</button>
+    </div>
+    <div class="season-month-label" id="season-month-label"></div>
+    <div class="season-tagline" id="season-tagline"></div>
+    <div class="season-species" id="season-species-tags"></div>
+  </div>
+  <div id="season-spots-list">
+    <div class="season-spots-heading">🎯 Top Spots This Season</div>
+    <div id="season-spot-items"></div>
+  </div>
+</div>
+
+<!-- ─── DECORATIVE SEA-GLASS (purely atmospheric) ─────────── -->
+<div class="sea-glass sg-1"></div>
+<div class="sea-glass sg-2"></div>
+<div class="sea-glass sg-3"></div>
+
+<!-- ─── ANIMATED WAVE FOOTER ─────────────────────────────── -->
+<div id="wave-footer">
+
+  <!-- Back wave — slow, faded navy -->
+  <svg class="wave-svg wave-svg-1"
+       xmlns="http://www.w3.org/2000/svg"
+       viewBox="0 0 1440 50"
+       preserveAspectRatio="none">
+    <path d="M0,28 C180,10 360,46 540,28 C720,10 900,46 1080,28 C1260,10 1440,28 1440,28 L1440,50 L0,50 Z"
+          fill="rgba(43,74,106,0.38)"/>
+  </svg>
+
+  <!-- Mid wave — muted ocean teal -->
+  <svg class="wave-svg wave-svg-2"
+       xmlns="http://www.w3.org/2000/svg"
+       viewBox="0 0 1440 50"
+       preserveAspectRatio="none">
+    <path d="M0,34 C180,18 360,50 540,34 C720,18 900,50 1080,34 C1260,18 1440,34 1440,34 L1440,50 L0,50 Z"
+          fill="rgba(74,140,151,0.44)"/>
+  </svg>
+
+  <!-- Front wave — warm sandy foam -->
+  <svg class="wave-svg wave-svg-3"
+       xmlns="http://www.w3.org/2000/svg"
+       viewBox="0 0 1440 50"
+       preserveAspectRatio="none">
+    <path d="M0,40 C180,28 360,50 540,40 C720,28 900,50 1080,40 C1260,28 1440,40 1440,40 L1440,50 L0,50 Z"
+          fill="rgba(212,188,150,0.52)"/>
+  </svg>
+
+</div>
+
+<script>
+// ── FISHING SPOTS DATA ──────────────────────────────────────────────────────
+const spots = [
+  {
+    name: "Haulover Inlet",
+    lat: 25.9003, lng: -80.1231,
+    desc: "One of South Florida's premier inlets. Powerful tidal currents funnel baitfish and attract everything from Snook and Tarpon to offshore species like Kingfish and Cobia.",
+    fish: ["Snook", "Tarpon", "Kingfish", "Cobia", "Bluefish"],
+    tip: "Position on the south jetty during an incoming tide for best results.",
+    intensity: 1.0
+  },
+  {
+    name: "Islamorada Flats",
+    lat: 24.9343, lng: -80.6505,
+    desc: "The 'Sport Fishing Capital of the World.' These legendary flats give you a shot at a Grand Slam — bonefish, permit, and tarpon in a single day.",
+    fish: ["Bonefish", "Permit", "Tarpon", "Sailfish", "Mahi-Mahi"],
+    tip: "Book a guided flats trip. A Grand Slam here is a once-in-a-lifetime experience.",
+    intensity: 1.0
+  },
+  {
+    name: "Government Cut Inlet",
+    lat: 25.7530, lng: -80.1250,
+    desc: "Miami's main shipping channel. Ripping tidal currents concentrate baitfish and attract large predators. Tarpon school here in huge numbers during spring migration.",
+    fish: ["Tarpon", "Snook", "Barracuda", "Goliath Grouper", "Jack Crevalle"],
+    tip: "Fish the outgoing tide at night with live pilchards for massive Tarpon.",
+    intensity: 0.95
+  },
+  {
+    name: "Biscayne Bay Flats",
+    lat: 25.6850, lng: -80.1900,
+    desc: "World-class shallow-water flats fishing in the heart of Biscayne Bay. Pristine seagrass beds and crystal-clear water make this ideal for sight-fishing.",
+    fish: ["Bonefish", "Permit", "Tarpon", "Snook", "Redfish"],
+    tip: "Best at low tide — wade or use a shallow-draft skiff to cover ground quietly.",
+    intensity: 0.92
+  },
+  {
+    name: "Jewish Creek Bridge",
+    lat: 25.2733, lng: -80.4362,
+    desc: "The first bridge entering the Florida Keys. Tarpon school here in massive numbers during the spring migration. A must-fish for Keys visitors.",
+    fish: ["Tarpon", "Snook", "Barracuda", "Permit", "Jack Crevalle"],
+    tip: "May–June are peak months for 100+ lb tarpon at Jewish Creek.",
+    intensity: 0.92
+  },
+  {
+    name: "Rickenbacker Causeway Bridge",
+    lat: 25.7346, lng: -80.1699,
+    desc: "The causeway to Key Biscayne spans deep water and strong currents. Tarpon regularly migrate through, and permit are spotted on the adjacent flats.",
+    fish: ["Tarpon", "Permit", "Snook", "Bonito", "Jack Crevalle"],
+    tip: "Tarpon roll under the bridge during spring migration — use large live crabs.",
+    intensity: 0.90
+  },
+  {
+    name: "South Pointe Park Pier",
+    lat: 25.7654, lng: -80.1319,
+    desc: "Miami Beach's southernmost pier sits at the mouth of Government Cut. Heavy boat traffic stirs up bait, drawing predator fish close to the structure.",
+    fish: ["Snapper", "Pompano", "Jack Crevalle", "Tarpon", "Ladyfish"],
+    tip: "Dawn and dusk during tide changes produce the best pier action.",
+    intensity: 0.87
+  },
+  {
+    name: "Crandon Park Marina",
+    lat: 25.7120, lng: -80.1570,
+    desc: "Key Biscayne's premier launch point. Nearby flats are legendary for bonefish, while the deeper channels hold permit and rolling tarpon.",
+    fish: ["Bonefish", "Permit", "Tarpon", "Redfish", "Snook"],
+    tip: "Hire a local flats guide for your first bonefish trip — it's worth every penny.",
+    intensity: 0.90
+  },
+  {
+    name: "Card Sound Bridge",
+    lat: 25.3419, lng: -80.4059,
+    desc: "The old toll bridge on Card Sound Road (Old US-1) is a legendary snook spot. Structure and adjacent mangroves hold massive resident snook and tarpon.",
+    fish: ["Snook", "Tarpon", "Barracuda", "Mangrove Snapper", "Jack Crevalle"],
+    tip: "One of the best big-snook spots in South Florida — fish at night on the outgoing tide.",
+    intensity: 0.89
+  },
+  {
+    name: "Cape Florida State Park",
+    lat: 25.6678, lng: -80.1601,
+    desc: "Bill Baggs State Park at Key Biscayne's southern tip offers a free 1,200-ft fishing pier, beach surf fishing, and access to nearshore reefs with excellent snapper and grouper.",
+    fish: ["Mangrove Snapper", "Grouper", "Tarpon", "Pompano", "Flounder"],
+    tip: "The free fishing pier is well-maintained — bring a cast net for live bait.",
+    intensity: 0.86
+  },
+  {
+    name: "Julia Tuttle Causeway",
+    lat: 25.8050, lng: -80.1480,
+    desc: "Bridge pilings along the Julia Tuttle Causeway create perfect habitat for snook and tarpon. A local favorite for bridge fishing year-round, especially after dark.",
+    fish: ["Snook", "Tarpon", "Sheepshead", "Mangrove Snapper", "Cobia"],
+    tip: "Fish the lights at night — Snook stack up under the bridge lights in big numbers.",
+    intensity: 0.81
+  },
+  {
+    name: "Black Point Marina",
+    lat: 25.5594, lng: -80.3395,
+    desc: "Located on the edge of Biscayne National Park, Black Point is the gateway to some of the most pristine backcountry fishing in South Florida.",
+    fish: ["Snook", "Redfish", "Bonefish", "Tarpon", "Permit"],
+    tip: "Launch at dawn and head into the National Park backcountry flats before the wind picks up.",
+    intensity: 0.83
+  },
+  {
+    name: "Homestead Bayfront Park",
+    lat: 25.4843, lng: -80.3965,
+    desc: "The southern gateway to Biscayne National Park. Fish from the seawall or launch a boat to access world-class backcountry flats and offshore reefs.",
+    fish: ["Snook", "Redfish", "Bonefish", "Barracuda", "Mutton Snapper"],
+    tip: "The park's offshore reefs hold Mutton Snapper — bring medium-heavy tackle.",
+    intensity: 0.78
+  },
+  {
+    name: "Watson Island",
+    lat: 25.7768, lng: -80.1735,
+    desc: "Just off the MacArthur Causeway near downtown Miami. Watson Island's seawall and adjacent waters see regular tarpon and jack action with city skyline views.",
+    fish: ["Tarpon", "Jack Crevalle", "Snook", "Ladyfish", "Barracuda"],
+    tip: "Tarpon roll here at sunset — try free-lining sardines on a light float.",
+    intensity: 0.76
+  },
+  {
+    name: "Virginia Key",
+    lat: 25.7276, lng: -80.1563,
+    desc: "Sheltered bay areas and winding mangrove shorelines around Virginia Key hold resident snook and redfish throughout the year.",
+    fish: ["Snook", "Redfish", "Flounder", "Mangrove Snapper", "Cobia"],
+    tip: "Work topwater lures along the mangrove edges at first light for explosive snook strikes.",
+    intensity: 0.71
+  },
+  {
+    name: "Matheson Hammock Park",
+    lat: 25.6655, lng: -80.2673,
+    desc: "A beautiful South Miami park with a unique atoll pool and tidal flats. Mangrove channels around the park hold snook and redfish year-round.",
+    fish: ["Snook", "Tarpon", "Redfish", "Mangrove Snapper", "Flounder"],
+    tip: "Kayak anglers can access remote mangrove creeks for trophy-sized snook.",
+    intensity: 0.73
+  },
+  {
+    name: "Oleta River State Park",
+    lat: 25.9285, lng: -80.1440,
+    desc: "North Miami's hidden gem and Florida's largest urban park. Paddle mangrove tunnels and fish the Oleta River for resident snook and rolling tarpon.",
+    fish: ["Snook", "Redfish", "Tarpon", "Mangrove Snapper", "Flounder"],
+    tip: "Rent a kayak from the park concession and explore the river channels at high tide.",
+    intensity: 0.69
+  },
+  {
+    name: "Sunny Isles Beach Pier",
+    lat: 25.9361, lng: -80.1228,
+    desc: "A free fishing pier in the heart of Sunny Isles Beach. Good access and varied species, with exceptional pompano fishing during the fall run.",
+    fish: ["Pompano", "Snapper", "Kingfish", "Spanish Mackerel", "Bluefish"],
+    tip: "Fall brings massive pompano runs — use Silly Willy jigs tipped with fresh shrimp.",
+    intensity: 0.74
+  },
+  {
+    name: "Baker's Haulover Surf",
+    lat: 25.9050, lng: -80.1280,
+    desc: "The surf and near-shore zones around Haulover Beach are excellent for pompano and bluefish, especially during the fall and winter months when they migrate south.",
+    fish: ["Pompano", "Bluefish", "Spanish Mackerel", "Whiting", "Flounder"],
+    tip: "Use fresh shrimp or sand fleas in the surf for Pompano — fish the troughs.",
+    intensity: 0.76
+  },
+  {
+    name: "Miami River",
+    lat: 25.7731, lng: -80.1975,
+    desc: "The Miami River's urban waters hide surprisingly good snook fishing. Bridge lights attract snook after dark, and the river mouth sees tarpon action on tide changes.",
+    fish: ["Snook", "Tarpon", "Jack Crevalle", "Mangrove Snapper", "Sheepshead"],
+    tip: "Fish the bridge lights with live shrimp on a free-line after dark for big snook.",
+    intensity: 0.77
+  },
+  {
+    name: "Venetian Causeway",
+    lat: 25.7903, lng: -80.1656,
+    desc: "The Venetian Causeway hops across a series of small islands between Miami and Miami Beach via Biscayne Bay. Bridge pilings attract sheepshead and snapper year-round, with tarpon rolling through in season.",
+    fish: ["Snook", "Sheepshead", "Mangrove Snapper", "Tarpon", "Flounder"],
+    tip: "Cast shrimp tight to the pilings for big sheepshead, especially November–February.",
+    intensity: 0.74
+  },
+  {
+    name: "79th Street Causeway",
+    lat: 25.8480, lng: -80.1490,
+    desc: "The JFK Causeway connects Miami to North Bay Village and Miami Beach. Bridge lights draw heavy snook concentrations at night and the surrounding bay holds good tarpon action.",
+    fish: ["Snook", "Tarpon", "Jack Crevalle", "Sheepshead", "Bluefish"],
+    tip: "Fish the bridge lights at night on the outgoing tide — snook stack up in the current seam.",
+    intensity: 0.72
+  },
+  {
+    name: "Broad Causeway / Bal Harbour",
+    lat: 25.8878, lng: -80.1390,
+    desc: "The Broad Causeway connects the mainland to Bal Harbour. Good structure fishing year-round with consistent snook and mangrove snapper in the adjacent Intracoastal.",
+    fish: ["Snook", "Mangrove Snapper", "Sheepshead", "Flounder", "Tarpon"],
+    tip: "Work soft plastic paddle tails along the bridge structure on the outgoing tide.",
+    intensity: 0.70
+  },
+  {
+    name: "Pelican Harbor",
+    lat: 25.8178, lng: -80.1623,
+    desc: "A Biscayne Bay access point between the Julia Tuttle and 79th Street Causeways. Good shore and kayak fishing with direct access to the bay's flats and mangrove shorelines.",
+    fish: ["Snook", "Tarpon", "Jack Crevalle", "Redfish", "Permit"],
+    tip: "Launch kayaks here to quietly work the nearby mangrove edges and grass flats.",
+    intensity: 0.68
+  },
+  {
+    name: "Greynolds Park Intracoastal",
+    lat: 25.9408, lng: -80.1650,
+    desc: "The Intracoastal Waterway adjacent to Greynolds Park in North Miami Beach offers mangrove-lined banks and shallow tidal flats. Less pressure than nearby Haulover.",
+    fish: ["Snook", "Redfish", "Flounder", "Mangrove Snapper", "Sheepshead"],
+    tip: "Kayak the mangrove edges at high tide — redfish tail visibly on the shallow grass.",
+    intensity: 0.67
+  },
+  {
+    name: "Keystone Point Canals",
+    lat: 25.9138, lng: -80.1411,
+    desc: "The residential canals and adjacent Intracoastal near Keystone Point hold surprising numbers of snook and tarpon, particularly around lit docks and bridge structures at night.",
+    fish: ["Snook", "Tarpon", "Redfish", "Flounder", "Jack Crevalle"],
+    tip: "Fish dock lights in the canals after dark with live shrimp for big resident snook.",
+    intensity: 0.69
+  },
+  {
+    name: "Dumfoundling Bay",
+    lat: 25.9242, lng: -80.1511,
+    desc: "A scenic bay in North Miami Beach surrounded by mangroves and residential waterways. Good snook and redfish habitat with noticeably less angling pressure than nearby Haulover.",
+    fish: ["Snook", "Redfish", "Tarpon", "Mangrove Snapper", "Flounder"],
+    tip: "Early morning topwater along the mangrove edges produces explosive strikes.",
+    intensity: 0.71
+  },
+  {
+    name: "Aventura Intracoastal",
+    lat: 25.9570, lng: -80.1400,
+    desc: "The Intracoastal through Aventura offers year-round snook fishing along dock lights and bridge pilings. Close to Haulover Inlet means pelagic species push in on tide changes.",
+    fish: ["Snook", "Tarpon", "Spanish Mackerel", "Cobia", "Bluefish"],
+    tip: "Target lit docks at night with live shrimp under a popping cork for consistent snook.",
+    intensity: 0.73
+  },
+  {
+    name: "Coconut Grove Marina",
+    lat: 25.7274, lng: -80.2397,
+    desc: "The historic Coconut Grove waterfront and marina area sit on western Biscayne Bay. The marina mouth and adjacent shoreline offer good fishing for a variety of bay species.",
+    fish: ["Snook", "Tarpon", "Redfish", "Mangrove Snapper", "Barracuda"],
+    tip: "The marina channel mouth is productive on tide changes — try DOA shrimp on a jig head.",
+    intensity: 0.68
+  },
+  {
+    name: "PortMiami Ship Channel",
+    lat: 25.7700, lng: -80.1550,
+    desc: "The deep shipping channel around PortMiami sees massive tarpon and snook action, especially when cruise ships stir up bait. Goliath grouper hold on the channel edges year-round.",
+    fish: ["Tarpon", "Snook", "Jack Crevalle", "Goliath Grouper", "Barracuda"],
+    tip: "Cruise ship departures at dusk churn up bait — position downcurrent for opportunistic predators.",
+    intensity: 0.76
+  },
+  {
+    name: "Deering Estate Shoreline",
+    lat: 25.6145, lng: -80.3141,
+    desc: "The historic Deering Estate's pristine shoreline on southern Biscayne Bay offers excellent redfish and snook habitat. One of the last undeveloped bay shorelines in Miami-Dade.",
+    fish: ["Snook", "Redfish", "Tarpon", "Bonefish", "Flounder"],
+    tip: "Fish the shoreline edges at high tide when redfish push up onto the grass flats to feed.",
+    intensity: 0.72
+  },
+  {
+    name: "Turkey Point Bay",
+    lat: 25.4360, lng: -80.3430,
+    desc: "The Biscayne Bay shoreline near Turkey Point features warm-water areas that attract fish year-round. Snook and redfish thrive in the warm shallows even in the coldest winters.",
+    fish: ["Snook", "Tarpon", "Redfish", "Bonefish", "Barracuda"],
+    tip: "Warm water keeps the bite active all winter — a key advantage over colder spots up north.",
+    intensity: 0.75
+  },
+  {
+    name: "Elliot Key (Biscayne NP)",
+    lat: 25.4556, lng: -80.1967,
+    desc: "The largest key in Biscayne National Park. Accessible only by boat, the western shoreline channel holds snook and tarpon while offshore reef edges offer grouper and snapper.",
+    fish: ["Snook", "Tarpon", "Grouper", "Mutton Snapper", "Barracuda"],
+    tip: "Anchor off the western shoreline and use live pilchards in the channel for snook and tarpon.",
+    intensity: 0.78
+  },
+  {
+    name: "Boca Chita Key",
+    lat: 25.4891, lng: -80.1735,
+    desc: "This iconic island in Biscayne National Park features a historic lighthouse and outstanding fishing. The surrounding flats between Boca Chita and the mainland hold bonefish and permit.",
+    fish: ["Bonefish", "Permit", "Tarpon", "Barracuda", "Snook"],
+    tip: "Boat access only — the backcountry flats west of Boca Chita are pristine and lightly fished.",
+    intensity: 0.76
+  },
+  {
+    name: "Caesar Creek (Biscayne NP)",
+    lat: 25.3722, lng: -80.2200,
+    desc: "Caesar Creek is a tidal pass between Adams Key and the outer reefs of Biscayne NP. Strong currents concentrate baitfish, making this a top spot for large tarpon and barracuda.",
+    fish: ["Tarpon", "Barracuda", "Permit", "Mutton Snapper", "Snook"],
+    tip: "The creek mouth sees fast current on both tides — drift live pilchards through the pass.",
+    intensity: 0.80
+  },
+  {
+    name: "North Key Largo Backcountry",
+    lat: 25.1700, lng: -80.4200,
+    desc: "The remote backcountry flats of North Key Largo are among the least-pressured in South Florida. Trophy-class bonefish and permit roam these pristine, crystal-clear shallows.",
+    fish: ["Bonefish", "Permit", "Tarpon", "Barracuda", "Mutton Snapper"],
+    tip: "Far less pressure than Islamorada — a top choice for trophy bonefish without crowds.",
+    intensity: 0.82
+  },
+  {
+    name: "Key Largo Florida Bay Flats",
+    lat: 25.0900, lng: -80.4800,
+    desc: "The Florida Bay side of Key Largo features extensive shallow flats perfect for sight-fishing. Clear water, turtle grass, and isolated coral heads hold bonefish and permit daily.",
+    fish: ["Bonefish", "Permit", "Redfish", "Barracuda", "Tarpon"],
+    tip: "Pole slowly and cast well ahead of fish — the gin-clear water means spooky fish.",
+    intensity: 0.85
+  },
+  {
+    name: "John Pennekamp State Park",
+    lat: 25.1200, lng: -80.3600,
+    desc: "America's first undersea park offers spectacular reef fishing alongside stunning coral formations. Grouper and snapper hold on the reef edges while permit cruise the sandy flats.",
+    fish: ["Grouper", "Mutton Snapper", "Hogfish", "Permit", "Barracuda"],
+    tip: "Anchor just off the reef edge and drop live bait for trophy Mutton Snapper.",
+    intensity: 0.80
+  },
+  {
+    name: "Tavernier Creek Bridge",
+    lat: 25.0185, lng: -80.5217,
+    desc: "The bridge at Tavernier Creek connects Key Largo to Plantation Key. This tidal pass is a classic Florida Keys tarpon spot, with fish staging here throughout the spring migration.",
+    fish: ["Tarpon", "Snook", "Permit", "Jack Crevalle", "Barracuda"],
+    tip: "Position on the upcurrent side of the bridge during a strong outgoing tide for best tarpon action.",
+    intensity: 0.83
+  },
+  {
+    name: "North Bay Village Waterway",
+    lat: 25.8382, lng: -80.1590,
+    desc: "The waterways surrounding North Bay Village between Miami and Miami Beach offer accessible year-round fishing. The area is sandwiched between two causeways, concentrating fish.",
+    fish: ["Snook", "Tarpon", "Sheepshead", "Mangrove Snapper", "Jack Crevalle"],
+    tip: "The current eddies between the two causeways hold fish around the clock — fish any tide.",
+    intensity: 0.70
+  }
+];
+
+// ── SPOT QUALITY SCORING ─────────────────────────────────────────────────────
+// Two signals derived entirely from the spots data:
+//   1. Species prestige  — how coveted each fish is as a South Florida game fish
+//   2. Reputation signals — descriptive language indicating world-class status
+// Scores are normalised across all spots to a 0.45–1.00 range.
+
+const PRESTIGE = {
+  'Bonefish': 10, 'Permit': 10,
+  'Tarpon': 9, 'Sailfish': 9,
+  'Goliath Grouper': 8,
+  'Mahi-Mahi': 7, 'Snook': 7, 'Redfish': 7,
+  'Grouper': 6, 'Mutton Snapper': 6, 'Hogfish': 6, 'Kingfish': 6, 'Cobia': 6,
+  'Pompano': 5, 'Mangrove Snapper': 5, 'Snapper': 5,
+  'Spanish Mackerel': 4, 'Sheepshead': 4, 'Flounder': 4, 'Barracuda': 4,
+  'Jack Crevalle': 3, 'Bluefish': 3, 'Bonito': 3,
+  'Ladyfish': 2, 'Whiting': 2,
+};
+
+const REPUTATION_SIGNALS = [
+  { re: /sport fishing capital|grand slam|once.in.a.lifetime/i, pts: 3 },
+  { re: /world.class|premier|legendary|iconic/i,                pts: 2 },
+  { re: /national park|pristine|lightly fished|least.pressured/i, pts: 1 },
+  { re: /guided|charter|skiff/i,                                   pts: 1 },
+];
+
+function rawQuality(spot) {
+  const speciesScore = spot.fish.reduce((sum, f) => sum + (PRESTIGE[f] ?? 3), 0);
+  const text         = spot.desc + ' ' + spot.tip;
+  const repScore     = REPUTATION_SIGNALS.reduce((sum, k) => sum + (k.re.test(text) ? k.pts : 0), 0);
+  return speciesScore + repScore * 5;
+}
+
+const _rawQ    = spots.map(rawQuality);
+const _maxRawQ = Math.max(..._rawQ);
+const _minRawQ = Math.min(..._rawQ);
+const qualityScores = _rawQ.map(q =>
+  parseFloat((0.45 + ((_maxRawQ === _minRawQ ? 0.5 : (q - _minRawQ) / (_maxRawQ - _minRawQ)) * 0.55)).toFixed(4))
+);
+
+// Rank-based tier thresholds — top 3 = World-class, next 10 = Excellent, rest = Good.
+// This is robust against one outlier dominating the score distribution.
+const _sorted           = [...qualityScores].sort((a, b) => b - a);
+const _worldClassCutoff = _sorted[2];   // 3rd-highest score
+const _excellentCutoff  = _sorted[12];  // 13th-highest score
+
+// ── MAP SETUP ───────────────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [25.65, -80.32],
+  zoom: 10,
+  zoomControl: true,
+  attributionControl: true
+});
+
+// CartoDB Voyager — warm, vintage printed-map feel
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+
+// ── HEATMAP ─────────────────────────────────────────────────────────────────
+// Initially seeded with quality scores as a visual placeholder.
+// Replaced with live iNaturalist observation counts when "📡 Live Density" loads.
+const heatData = spots.map((s, i) => [s.lat, s.lng, qualityScores[i]]);
+
+const heatLayer = L.heatLayer(heatData, {
+  radius: 38,
+  blur: 28,
+  maxZoom: 13,
+  max: 1.0,
+  gradient: {
+    0.0:  'rgba(74,140,150,0)',
+    0.25: 'rgba(74,140,150,0.38)',
+    0.45: 'rgba(100,162,70,0.50)',
+    0.62: 'rgba(210,155,42,0.64)',
+    0.78: 'rgba(204,85,64,0.76)',
+    1.0:  'rgba(155,38,20,0.92)'
+  }
+}).addTo(map);
+
+// ── MARKERS ─────────────────────────────────────────────────────────────────
+function tierClass(quality) {
+  if (quality >= _worldClassCutoff) return 'fspot-hot';
+  if (quality >= _excellentCutoff)  return 'fspot-warm';
+  return 'fspot-cool';
+}
+
+function makeIcon(quality) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="fspot ${tierClass(quality)}">🐟</div>`,
+    iconSize:   [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor:[0, -14]
+  });
+}
+
+const wikiLinks = {
+  'Snook':            'https://en.wikipedia.org/wiki/Common_snook',
+  'Tarpon':           'https://en.wikipedia.org/wiki/Tarpon',
+  'Bonefish':         'https://en.wikipedia.org/wiki/Bonefish',
+  'Permit':           'https://en.wikipedia.org/wiki/Permit_(fish)',
+  'Redfish':          'https://en.wikipedia.org/wiki/Red_drum',
+  'Kingfish':         'https://en.wikipedia.org/wiki/King_mackerel',
+  'Cobia':            'https://en.wikipedia.org/wiki/Cobia',
+  'Bluefish':         'https://en.wikipedia.org/wiki/Bluefish',
+  'Sheepshead':       'https://en.wikipedia.org/wiki/Sheepshead_(fish)',
+  'Mangrove Snapper': 'https://en.wikipedia.org/wiki/Mangrove_snapper',
+  'Barracuda':        'https://en.wikipedia.org/wiki/Barracuda',
+  'Goliath Grouper':  'https://en.wikipedia.org/wiki/Atlantic_goliath_grouper',
+  'Jack Crevalle':    'https://en.wikipedia.org/wiki/Crevalle_jack',
+  'Pompano':          'https://en.wikipedia.org/wiki/Florida_pompano',
+  'Spanish Mackerel': 'https://en.wikipedia.org/wiki/Spanish_mackerel',
+  'Flounder':         'https://en.wikipedia.org/wiki/Flounder',
+  'Grouper':          'https://en.wikipedia.org/wiki/Grouper',
+  'Mutton Snapper':   'https://en.wikipedia.org/wiki/Mutton_snapper',
+  'Mahi-Mahi':        'https://en.wikipedia.org/wiki/Mahi-mahi',
+  'Sailfish':         'https://en.wikipedia.org/wiki/Sailfish',
+  'Bonito':           'https://en.wikipedia.org/wiki/Bonito',
+  'Ladyfish':         'https://en.wikipedia.org/wiki/Ladyfish',
+  'Hogfish':          'https://en.wikipedia.org/wiki/Hogfish',
+  'Whiting':          'https://en.wikipedia.org/wiki/Whiting_(fish)',
+  'Snapper':          'https://en.wikipedia.org/wiki/Lutjanidae',
+};
+
+function makePopup(spot, quality) {
+  const tier     = tierClass(quality);
+  const qualLabel = tier === 'fspot-hot' ? 'World-class' : tier === 'fspot-warm' ? 'Excellent' : 'Good';
+  const tags = spot.fish.map(f => {
+    const url = wikiLinks[f];
+    return url
+      ? `<a class="pop-tag" href="${url}" target="_blank" rel="noopener noreferrer">${f}</a>`
+      : `<span class="pop-tag">${f}</span>`;
+  }).join('');
+  return `
+    <div class="pop-title">🎣 ${spot.name}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <span class="pop-section-label" style="margin:0">⭐ Spot Quality</span>
+      <span class="pop-tag" style="font-family:'Special Elite',monospace;letter-spacing:.4px;text-transform:uppercase;font-size:.66rem">${qualLabel}</span>
+    </div>
+    <div class="pop-desc">${spot.desc}</div>
+    <div class="pop-section-label">🐟 Species You Can Catch</div>
+    <div class="pop-tags">${tags}</div>
+    <div class="pop-tip"><strong>Pro Tip:</strong> ${spot.tip}</div>
+  `;
+}
+
+const markerGroup  = L.layerGroup();
+const markersByName = {};
+
+spots.forEach((spot, i) => {
+  const marker = L.marker([spot.lat, spot.lng], { icon: makeIcon(qualityScores[i]) });
+  marker.bindPopup(makePopup(spot, qualityScores[i]), { maxWidth: 300, minWidth: 240 });
+  markerGroup.addLayer(marker);
+  markersByName[spot.name] = marker;
+});
+
+markerGroup.addTo(map);
+
+// ── TOGGLE CONTROLS ──────────────────────────────────────────────────────────
+
+document.getElementById('spot-count').textContent = `${spots.length} Spots`;
+
+// ── SEASON DATA & LOGIC ───────────────────────────────────────────────────────
+const SEASONS = {
+  winter: {
+    name: 'Winter', months: [12, 1, 2], icon: '❄️',
+    color: '#4a8c97',
+    tagline: 'Warm-water refuges and lit bridge structure are key as fish seek warmer pockets of the bay.',
+    hotSpecies: ['Sheepshead', 'Snook', 'Bonefish', 'Redfish', 'Permit'],
+    spots: [
+      { name: 'Turkey Point Bay',
+        reason: 'Warm-water outflows keep snook & redfish biting all winter — a cold-weather secret weapon.' },
+      { name: 'Card Sound Bridge',
+        reason: 'Massive snook stack under the bridge structure on cold nights.' },
+      { name: 'Venetian Causeway',
+        reason: 'Peak sheepshead season — fish live shrimp tight to the pilings.' },
+      { name: 'Biscayne Bay Flats',
+        reason: 'Winter bonefish are fat, aggressive, and easier to spot on sunny calm days.' },
+      { name: 'Julia Tuttle Causeway',
+        reason: 'Snook cluster under bridge lights seeking warm water pockets.' },
+    ]
+  },
+  spring: {
+    name: 'Spring', months: [3, 4, 5], icon: '🌊',
+    color: '#cc5540',
+    tagline: 'The great tarpon migration arrives — the most spectacular fishing event in South Florida.',
+    hotSpecies: ['Tarpon', 'Permit', 'Cobia', 'Kingfish', 'Bonefish'],
+    spots: [
+      { name: 'Haulover Inlet',
+        reason: 'Migrating tarpon pour through on every tide — one of the premier tarpon spots on Earth.' },
+      { name: 'Government Cut Inlet',
+        reason: 'Peak tarpon season — fish at night on the outgoing tide with live pilchards.' },
+      { name: 'Jewish Creek Bridge',
+        reason: 'May–June: 100+ lb tarpon school here by the hundreds at peak migration.' },
+      { name: 'Rickenbacker Causeway Bridge',
+        reason: 'Rolling tarpon under the bridge and permit cruising the adjacent flats.' },
+      { name: 'Islamorada Flats',
+        reason: 'Grand Slam season — bonefish, permit, and tarpon all catchable in a single day.' },
+    ]
+  },
+  summer: {
+    name: 'Summer', months: [6, 7, 8], icon: '☀️',
+    color: '#b8a07a',
+    tagline: 'Offshore sailfish and mahi run strong while inshore snook hit spawning aggregations.',
+    hotSpecies: ['Sailfish', 'Mahi-Mahi', 'Snook', 'Mutton Snapper', 'Grouper'],
+    spots: [
+      { name: 'Government Cut Inlet',
+        reason: 'Snook spawning aggregations at the inlet mouth — some of the biggest fish of the year.' },
+      { name: 'Islamorada Flats',
+        reason: 'Offshore sailfish and mahi-mahi are running strong — book a morning charter.' },
+      { name: 'John Pennekamp State Park',
+        reason: 'Grouper and mutton snapper stack on the reef edges in summer numbers.' },
+      { name: 'Cape Florida State Park',
+        reason: 'Night fishing the free pier for snapper under the lights is exceptional in summer.' },
+      { name: 'South Pointe Park Pier',
+        reason: 'Consistent summer action — jacks, snapper, and the occasional tarpon passing by.' },
+    ]
+  },
+  fall: {
+    name: 'Fall', months: [9, 10, 11], icon: '🍂',
+    color: '#cc5540',
+    tagline: 'Pompano run the beaches south while kingfish and Spanish mackerel push through nearshore.',
+    hotSpecies: ['Pompano', 'Spanish Mackerel', 'Kingfish', 'Cobia', 'Bluefish'],
+    spots: [
+      { name: "Baker's Haulover Surf",
+        reason: 'Prime pompano run — sand fleas in the troughs produce fish in big numbers.' },
+      { name: 'Sunny Isles Beach Pier',
+        reason: 'Peak pompano and Spanish mackerel — Silly Willy jigs with shrimp are deadly.' },
+      { name: 'Haulover Inlet',
+        reason: 'Kingfish and cobia follow baitfish schools migrating south through the inlet.' },
+      { name: 'Aventura Intracoastal',
+        reason: 'Spanish mackerel push into the Intracoastal ahead of the first cold fronts.' },
+      { name: 'Cape Florida State Park',
+        reason: 'Pompano in the surf and bluefish blitzing off the pier on fall mornings.' },
+    ]
+  }
+};
+
+function getCurrentSeason() {
+  const month = new Date().getMonth() + 1;
+  return Object.values(SEASONS).find(s => s.months.includes(month));
+}
+
+const seasonHighlightGroup = L.layerGroup().addTo(map);
+
+function updateSeasonHighlights(season) {
+  seasonHighlightGroup.clearLayers();
+  season.spots.forEach(({ name }) => {
+    const spot = spots.find(s => s.name === name);
+    if (!spot) return;
+    L.circleMarker([spot.lat, spot.lng], {
+      radius: 17, color: season.color, weight: 2.5,
+      fill: false, opacity: 0.8, dashArray: '5 4'
+    }).addTo(seasonHighlightGroup);
+  });
+}
+
+let seasonOpen = false;
+
+function toggleSeason() {
+  seasonOpen = !seasonOpen;
+  document.getElementById('season-panel').classList.toggle('open', seasonOpen);
+  document.getElementById('btn-season').classList.toggle('on', seasonOpen);
+  document.getElementById('legend').classList.toggle('shifted', seasonOpen);
+  if (seasonOpen) {
+    const season = getCurrentSeason();
+    renderSeasonPanel(season);
+    updateSeasonHighlights(season);
+  } else {
+    seasonHighlightGroup.clearLayers();
+  }
+}
+
+function renderSeasonPanel(season) {
+  const now = new Date();
+  const monthName = now.toLocaleString('default', { month: 'long' });
+  document.getElementById('season-icon').textContent    = season.icon + ' ';
+  document.getElementById('season-name').textContent    = season.name;
+  document.getElementById('season-month-label').textContent = `${monthName} — ${season.name} in South Florida`;
+  document.getElementById('season-tagline').textContent = season.tagline;
+  document.getElementById('season-species-tags').innerHTML =
+    season.hotSpecies.map(s => `<span class="season-species-tag">🐟 ${s}</span>`).join('');
+  document.getElementById('season-spot-items').innerHTML =
+    season.spots.map((item, i) => `
+      <div class="season-spot-item" data-name="${esc(item.name)}" onclick="flyToSpot(this.dataset.name)">
+        <div class="season-spot-num">${i + 1}</div>
+        <div>
+          <div class="season-spot-name">${item.name}</div>
+          <div class="season-spot-reason">${item.reason}</div>
+          <div class="season-spot-fly">📍 Fly to spot →</div>
+        </div>
+      </div>`).join('');
+}
+
+function flyToSpot(name) {
+  const spot   = spots.find(s => s.name === name);
+  const marker = markersByName[name];
+  if (!spot || !marker) return;
+  map.flyTo([spot.lat, spot.lng], 13, { duration: 1.2 });
+  setTimeout(() => marker.openPopup(), 1300);
+}
+
+// ── LIVE DENSITY (iNaturalist) ───────────────────────────────────────────────
+// Counts verified fish observations (Actinopterygii) within DENSITY_KM of each
+// spot using the iNaturalist public API (no key required, CORS-enabled).
+// Counts are log-normalised then scaled to 0.30–1.00 so every spot stays
+// visible while the relative differences drive the heatmap and tier colours.
+
+const INAT_TAXON  = 47178;  // Actinopterygii — ray-finned fishes
+const DENSITY_KM  = 3;      // search radius around each spot (kilometres)
+
+let densityLoading = false;
+
+async function loadLiveDensity() {
+  if (densityLoading) return;   // prevent overlapping fetches
+  densityLoading = true;
+
+  const btn = document.getElementById('btn-density');
+  btn.classList.add('on');
+  btn.style.pointerEvents = 'none';
+  btn.textContent = `⏳ 0 / ${spots.length}`;
+
+  // Fetch counts in batches of 5 to stay well under rate limits
+  const counts = new Array(spots.length).fill(0);
+  const BATCH   = 5;
+
+  for (let i = 0; i < spots.length; i += BATCH) {
+    const slice   = spots.slice(i, i + BATCH);
+    const results = await Promise.allSettled(slice.map(s => inatCount(s.lat, s.lng)));
+    results.forEach((r, j) => { counts[i + j] = r.status === 'fulfilled' ? r.value : 0; });
+    btn.textContent = `⏳ ${Math.min(i + BATCH, spots.length)} / ${spots.length}`;
+    if (i + BATCH < spots.length) await new Promise(r => setTimeout(r, 400));
+  }
+
+  // Log-normalise: handles skewed distributions where one hotspot dominates
+  const maxC   = Math.max(...counts, 1);
+  const scores = counts.map(c =>
+    parseFloat((0.30 + (Math.log(c + 1) / Math.log(maxC + 1)) * 0.70).toFixed(4))
+  );
+
+  applyDensityScores(scores);
+  densityLoading = false;
+
+  const loadedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  btn.textContent = '↺ Refresh';
+  btn.style.pointerEvents = '';
+  btn.title = `iNaturalist fish observations (Actinopterygii) within ${DENSITY_KM} km\nLast updated ${loadedAt} · Click to refresh`;
+
+  const srcLabel = document.getElementById('legend-density-src');
+  if (srcLabel) srcLabel.textContent = `iNaturalist · ${loadedAt}`;
+}
+
+// Fetch observation count for a single coordinate from iNaturalist
+async function inatCount(lat, lng) {
+  const controller = new AbortController();
+  const timer      = setTimeout(() => controller.abort(), 12000);
+  try {
+    const url  = `https://api.inaturalist.org/v1/observations`
+               + `?taxon_id=${INAT_TAXON}`
+               + `&lat=${lat}&lng=${lng}&radius=${DENSITY_KM}`
+               + `&per_page=0`;
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    const data = await resp.json();
+    return data.total_results ?? 0;
+  } catch {
+    clearTimeout(timer);
+    return 0;
+  }
+}
+
+// Update the heatmap only — markers always reflect quality, never density
+function applyDensityScores(scores) {
+  heatLayer.setLatLngs(spots.map((s, i) => [s.lat, s.lng, scores[i]]));
+}
+
+// ── REDDIT FEED ──────────────────────────────────────────────────────────────
+let redditOpen   = false;
+let redditLoaded = false;
+let currentQ     = 'miami fishing florida';
+let currentSub   = 'FLFishing+fishing';
+let currentSort  = 'hot';
+
+function toggleReddit() {
+  redditOpen = !redditOpen;
+  document.getElementById('reddit-panel').classList.toggle('open', redditOpen);
+  document.getElementById('btn-reddit').classList.toggle('on', redditOpen);
+  if (redditOpen && !redditLoaded) loadReddit();
+}
+
+function setFilter(el) {
+  document.querySelectorAll('.rf-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  currentQ   = el.dataset.q;
+  currentSub = el.dataset.sub;
+  redditLoaded = false;
+  loadReddit();
+}
+
+async function loadReddit(force = false) {
+  if (redditLoaded && !force) return;
+  redditLoaded = true;
+
+  const box = document.getElementById('reddit-posts');
+  box.innerHTML = '<div class="r-state"><div class="r-spinner"></div>Fetching posts…</div>';
+
+  const redditUrl = `https://www.reddit.com/r/${currentSub}/search.json` +
+    `?q=${encodeURIComponent(currentQ)}&sort=${currentSort}&t=month&limit=15&restrict_sr=true&raw_json=1`;
+
+  const proxies = [
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  ];
+
+  let lastErr = 'Unknown error';
+
+  for (const makeProxy of proxies) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      const resp = await fetch(makeProxy(redditUrl), { signal: controller.signal });
+      clearTimeout(timer);
+
+      const text = await resp.text();
+      if (!text || text.trimStart().startsWith('<')) throw new Error('Proxy returned HTML — blocked by Reddit');
+
+      let data;
+      try {
+        const parsed = JSON.parse(text);
+        data = parsed.contents ? JSON.parse(parsed.contents) : parsed;
+      } catch {
+        throw new Error('Could not parse response as JSON');
+      }
+
+      if (!data?.data?.children) throw new Error('Unexpected response shape');
+
+      const posts = data.data.children.map(c => c.data).filter(p => !p.stickied);
+      if (!posts.length) {
+        box.innerHTML = '<div class="r-state">No posts found for this filter.</div>';
+        return;
+      }
+      box.innerHTML = posts.map(renderPost).join('');
+      return;
+
+    } catch (e) {
+      lastErr = e.name === 'AbortError' ? 'Request timed out' : e.message;
+    }
+  }
+
+  box.innerHTML = `<div class="r-state r-err">⚠️ Could not load feed<br>
+    <small style="opacity:.7">${lastErr}</small><br><br>
+    <button class="r-btn" onclick="loadReddit(true)" style="margin:0 auto;display:block">↺ Try again</button></div>`;
+}
+
+function renderPost(p) {
+  const ago   = relTime(p.created_utc);
+  const score = p.score >= 1000 ? (p.score / 1000).toFixed(1) + 'k' : p.score;
+  const bad   = ['self','default','nsfw','spoiler','','null','image'];
+  const thumb = p.thumbnail && !bad.includes(p.thumbnail)
+    ? `<img class="r-thumb" src="${p.thumbnail}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    : '';
+  const ph = `<div class="r-thumb-ph" ${thumb ? 'style="display:none"' : ''}>🎣</div>`;
+
+  return `
+    <a class="r-post" href="${p.url}" target="_blank" rel="noopener noreferrer">
+      ${thumb}${ph}
+      <div class="r-body">
+        <div class="r-title">${esc(p.title)}</div>
+        <div class="r-meta">
+          <span class="r-sub">${p.subreddit_name_prefixed}</span>
+          <span class="r-score">▲ ${score}</span>
+          <span>💬 ${p.num_comments}</span>
+          <span class="r-ago">${ago}</span>
+        </div>
+      </div>
+    </a>`;
+}
+
+function relTime(utc) {
+  const s = Math.floor(Date.now() / 1000) - utc;
+  if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Auto-load live density on page open
+loadLiveDensity();
+</script>
+</body>
+</html>
